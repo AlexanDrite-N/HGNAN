@@ -1,0 +1,7 @@
+torch
+psutil
+pandas
+numpy
+torch_geometric
+rdkit
+scikit-learn
