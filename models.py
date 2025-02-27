@@ -32,9 +32,6 @@ class HGNAM(nn.Module):
         self.m_per_feature = m_per_feature
         self.feature_weights = nn.Parameter(torch.rand(self.in_channels))
 
-        # --------------------------------------------------
-        # 构造 shape functions f_k
-        # --------------------------------------------------
         self.fs = nn.ModuleList()
         for _ in range(in_channels):
             if num_layers == 1:
@@ -46,9 +43,6 @@ class HGNAM(nn.Module):
                 layers.append(nn.Linear(hidden_channels, out_channels, bias=bias))
             self.fs.append(nn.Sequential(*layers))
 
-        # --------------------------------------------------
-        # 构造 m 网络（\rho）
-        # --------------------------------------------------
         if m_per_feature:
             self.ms = nn.ModuleList()
             for _ in range(out_channels if limited_m else in_channels):
@@ -76,17 +70,8 @@ class HGNAM(nn.Module):
                     m_layers.append(nn.Linear(hidden_channels, out_channels, bias=bias))
             self.m = nn.Sequential(*m_layers)
 
-    # --------------------------------------------------
-    # forward 方法
-    # --------------------------------------------------
     def forward(self, inputs):
-        """
-        inputs 包含:
-          - x: (N, in_channels) 节点特征
-          - h: (N, E) 或 (E, N) incidence 矩阵
-          - dist_mat: (E, E) 超边距离矩阵
-          - norm_mat: (E, E) 超边归一化矩阵
-        """
+
         x, distances, normalization_matrix = inputs.x.to(self.device), inputs.dist_mat.to(self.device), inputs.norm_mat.to(self.device)
         fx = torch.empty(x.size(0), x.size(1), self.out_channels).to(self.device)
         for feature_index in range(x.size(1)):
@@ -96,9 +81,6 @@ class HGNAM(nn.Module):
         fx_weighted = fx * attention_weights.unsqueeze(0).unsqueeze(-1)  # (N, num_features, out_channels)
         f_sums = fx_weighted.sum(dim=1)
 
-        # --------------------------------------------------
-        # 使用超边距离和归一化矩阵，通过 m 网络进行距离加权聚合
-        # --------------------------------------------------
         stacked_results = torch.empty(x.size(0), self.out_channels).to(self.device)
         for j, node in enumerate(range(x.size(0))):
             node_dists = distances[node] # Shape: (# nodes,)
