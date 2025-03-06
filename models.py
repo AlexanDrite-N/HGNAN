@@ -37,9 +37,7 @@ class HGNAM(nn.Module):
         if self.weight == True:
             self.feature_weights = nn.Parameter(torch.rand(self.in_channels))
 
-        # --------------------------------------------------
-        # 构造 shape functions f_k
-        # --------------------------------------------------
+        # shape functions f_k
         self.fs = nn.ModuleList()
         for _ in range(in_channels):
             if num_layers == 1:
@@ -50,7 +48,8 @@ class HGNAM(nn.Module):
                     layers += [nn.Linear(hidden_channels, hidden_channels, bias=bias), nn.ReLU(), nn.Dropout(p=dropout)]
                 layers.append(nn.Linear(hidden_channels, out_channels, bias=bias))
             self.fs.append(nn.Sequential(*layers))
-            
+
+        # distance functions \rho
         if m_per_feature:
             self.ms = nn.ModuleList()
             for _ in range(out_channels if limited_m else in_channels):
@@ -108,61 +107,45 @@ class HGNAM(nn.Module):
             output = stacked_results
 
         elif self.aggregation == "neighbor":
-            # 利用邻接关系构造稀疏边索引： (i, j) 表示 j 是 i 的邻居
+            # sparse edge index
             neighbor_mask = (distances == 1.0)
-            edge_indices = neighbor_mask.nonzero(as_tuple=False)  # 形状 (E, 2)
+            edge_indices = neighbor_mask.nonzero(as_tuple=False)
 
             if edge_indices.size(0) == 0:
                 output = f_sums
             else:
-                # 分别获得源节点和目标节点的索引
-                i_indices = edge_indices[:, 0]  # 源节点索引
-                j_indices = edge_indices[:, 1]  # 邻居节点索引
+                # find target node and its neighbor's index
+                i_indices = edge_indices[:, 0]
+                j_indices = edge_indices[:, 1]
 
-                # 对每条边计算 m(distances)，注意：边上的距离一般为1.0，但仍保持通用性
-                edge_distances = distances[i_indices, j_indices].view(-1, 1)  # 形状 (E, 1)
-                m_edge = self.m(edge_distances)  # 形状 (E, out_channels)
+                # compute \rho (though it is trivial)
+                edge_distances = distances[i_indices, j_indices].view(-1, 1)
+                m_edge = self.m(edge_distances)
 
-                # 如果需要归一化，则对每条边应用对应的归一化因子
                 if self.normalize_m:
                     norm_values = normalization_matrix[i_indices, j_indices].view(-1, 1)
                     m_edge = m_edge / norm_values
 
-                # 取出邻居 j 的特征向量
-                f_j = f_sums[j_indices]  # 形状 (E, out_channels)
+                # feature vector for neighbor
+                f_j = f_sums[j_indices]
 
-                # 每条边的贡献： m_edge * f_j
-                edge_contrib = m_edge * f_j  # 形状 (E, out_channels)
+                # each neighbor's contribution: m_edge * f_j
+                edge_contrib = m_edge * f_j
 
                 N = distances.size(0)
                 out_channels = f_sums.size(1)
-                # 初始化输出张量
                 output = torch.zeros((N, out_channels), device=f_sums.device)
-                # 利用 index_add_ 按源节点 i 聚合所有来自其邻居的贡献
+                # aggregation
                 output.index_add_(0, i_indices, edge_contrib)
 
-                # 统计每个节点的邻居数量
+                # counting for #neighbor for each node
                 neighbor_counts = torch.zeros((N, 1), device=f_sums.device)
                 ones = torch.ones((edge_indices.size(0), 1), device=f_sums.device)
                 neighbor_counts.index_add_(0, i_indices, ones)
 
-                # 对于没有邻居的节点，直接用节点自身的特征
+                # in case that a node doesn't have neighbors, then use its own feature
                 mask = (neighbor_counts == 0).squeeze(1)
                 output[mask] = f_sums[mask]
-
-            # neighbor_mask = (distances == 1.0)
-
-            # m_dist = self.m(distances.view(-1, 1)).view(distances.size(0), distances.size(1), -1)
-
-            # if self.normalize_m:
-            #     norm = normalization_matrix.unsqueeze(-1)
-            #     m_dist = m_dist / norm
-
-            # m_dist = m_dist * neighbor_mask.unsqueeze(-1).float()
-            # output = torch.sum(m_dist * f_sums.unsqueeze(0), dim=1)
-
-            # neighbor_counts = neighbor_mask.float().sum(dim=1, keepdim=True)
-            # output = torch.where(neighbor_counts > 0, output, f_sums)
         else:
             raise ValueError("Unknown aggregation type: {}".format(self.aggregation))
         return output

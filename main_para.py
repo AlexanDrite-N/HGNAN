@@ -42,8 +42,7 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
                    data_name, unique_run_id, one_m, normalize_m, num_classes, out_dim, weight, aggregation, tuning, loss_type):
     np.random.seed(seed)
     torch.manual_seed(seed)
-    
-    # 自动根据可用 GPU 数量选择对应 GPU，若没有GPU则使用 CPU
+
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
         print(f"num_gpu: {num_gpus}")
@@ -51,13 +50,11 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
         device = torch.device(f"cuda:{device_id}")
     else:
         device = torch.device("cpu")
-    
-    # 每个 run 使用独立的日志文件
+
     log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log_run{run_index}.txt'
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     log = open(log_file, 'w')
-    
-    # 初始化模型（这里只处理 HGNAM 和 EdgeHGNAM，如需扩展请修改）
+
     if model_name in ['HGNAM', 'EdgeHGNAM']:
         model = HGNAM(in_channels=num_features,
                       hidden_channels=hidden_channels,
@@ -125,8 +122,7 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
         if tuning == False:
             print(f"Run {run_index}, Training epoch {epoch}:")
             log.write(f"Run {run_index}, Training epoch {epoch}:\n")
-            
-        # 调用 trainer.train_epoch 进行训练
+
         train_loss, train_acc, train_auroc, train_auprc, train_recall, train_precision, train_f1, train_time = \
             trainer.train_epoch(model, dloader=train_loader, optimizer=optimizer, device=device, loss_fn=loss_fn)
         
@@ -217,12 +213,10 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
             test_loss, test_acc = future.result()
             final_test_losses.append(test_loss)
             final_test_accs.append(test_acc)
-    
-    # 将 GPU 张量转换为 CPU 张量再变成 numpy
+
     final_test_losses = [loss.cpu().item() if isinstance(loss, torch.Tensor) else loss for loss in final_test_losses]
     final_test_accs = [acc.cpu().item() if isinstance(acc, torch.Tensor) else acc for acc in final_test_accs]
 
-    # 然后再转成 numpy array
     final_test_losses = np.array(final_test_losses)
     final_test_accs = np.array(final_test_accs)
     
@@ -251,7 +245,7 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
             cur_line += f'{final_acc_mean:.3f} ± {final_acc_std:.3f}\n'
             write_obj.write(cur_line)
     
-    return final_loss_mean, final_loss_var, final_acc_mean, final_acc_var
+    return final_loss_mean, final_loss_std, final_acc_mean, final_acc_std
 
 if __name__ == '__main__':
     mp.set_start_method("spawn", force=True)
@@ -283,7 +277,6 @@ if __name__ == '__main__':
     args = parser.parse_args()
     loss_thresh = 0.00001
 
-    # 数据加载，这里假设 datasets.get_data 返回 train_loader, val_loader, test_loader, num_features, num_classes
     train_loader, val_loader, test_loader, num_features, num_classes = datasets.get_data(
         data_name=args.data_name,
         model_name=args.model_name,
@@ -304,7 +297,6 @@ if __name__ == '__main__':
     if args.tuning == False:
         print(args)
 
-    # 如果需要并行运行，则调用 run_exp_parallel
     run_exp_parallel(train_loader=train_loader, val_loader=val_loader, test_loader=test_loader, num_features=num_features,
                      runs=args.runs, n_layers=args.n_layers, early_stop_flag=args.early_stop, dropout=args.dropout,
                      model_name=args.model_name, num_epochs=args.num_epochs, wd=args.wd,
