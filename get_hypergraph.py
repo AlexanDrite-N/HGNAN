@@ -16,10 +16,27 @@ from utils import *
 def get_hypergraph(path='data/raw_data',
                    processed_data_dir='processed_data',dataset='iAF1260', 
                    train_size=0.6):
+    """
+    Constructs a hypergraph but focuses on hyperedge-level distance rather than node distance.
+    1) Loads node features (optional).
+    2) Loads a raw incidence matrix from a .mat file.
+    3) Performs negative sampling to extend the incidence matrix with "negative" edges.
+    4) Computes hyperedge-to-hyperedge distances + normalization.
+    5) Splits edges into train/val/test sets (stratified).
+    6) Packs data into a torch_geometric.data.Data object.
+    7) Adds sign_h to indicate reactants/products for each hyperedge.
+    """
 
+    # ----------------------------
+    # 1) Load node features
+    # ----------------------------
     feature_path = f'./{path}/{dataset}/{dataset}.pt'
     node_features = torch.load(feature_path)
+    # node_features: shape (N, in_channels)
 
+    # ----------------------------
+    # 2) Load raw incidence matrix from .mat
+    # ----------------------------
     mat_path = f'./{path}/{dataset}/{dataset}.mat'
     data = loadmat(mat_path)
     H = data[dataset]['S']
@@ -28,7 +45,9 @@ def get_hypergraph(path='data/raw_data',
 
     incidence_matrix = np.where(H > 0, 1, np.where(H < 0, 1, 0)).astype(np.float32)
     incidence_matrix = torch.tensor(incidence_matrix, dtype=torch.float)
-
+    # ----------------------------
+    # 3) Negative sampling
+    # ----------------------------
     combined_H, num_neg_edges = negative_sampling(H) # combined_H shape: (#node, #pos_edges + #neg_edges)
     combined_H = torch.tensor(combined_H, dtype=torch.float)
 
@@ -39,20 +58,27 @@ def get_hypergraph(path='data/raw_data',
 
     edge_features = diff_pooling(node_features, combined_H)
     print("Finish calculating edge embedding!")
-
+    # ----------------------------
+    # 4) Compute hyperedge-to-hyperedge distances & normalization
+    # ----------------------------
     edge_dist = shortest_edge_distances(incidence_matrix, full_incidence_matrix, s=1)
     print("Finish calculating distances!")
 
+    # Build a normalization matrix
     normalization_matrix = edge_dist.clone()
     for i, entry in enumerate(edge_dist):
         distances_counts = torch.unique(entry, return_counts=True)
         normalization_matrix[i].apply_(
             lambda x: distances_counts[1][(distances_counts[0] == x).nonzero().item()])
 
+    # Optionally invert the distances (avoid zero-dist by adding 1)
     edge_dist = edge_dist.clone()
     edge_dist += 1
     edge_dist = 1.0 / edge_dist
 
+    # ----------------------------
+    # 5) Create labels & do train/val/test splits
+    # ----------------------------
     labels = np.concatenate([np.ones(num_pos_edges), np.zeros(num_neg_edges)])
     assert len(labels) == total_edges, "Mismatch in label length"
 
@@ -62,12 +88,16 @@ def get_hypergraph(path='data/raw_data',
         indices, labels, test_size=test_size, stratify=labels, random_state=0
     )
 
+    # Build boolean masks
     train_mask = torch.zeros(total_edges, dtype=torch.bool)
     test_mask = torch.zeros(total_edges, dtype=torch.bool)
 
     train_mask[train_idx] = True
     test_mask[test_idx] = True
 
+    # ----------------------------
+    # 6) Pack everything into a Data object
+    # ----------------------------
     hypergraph = Data(
         x=torch.tensor(edge_features, dtype=torch.float),  
         h=combined_H,                      
@@ -90,7 +120,7 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
     into an incidence matrix where rows represent nodes and columns represent hyperedges.
     '''
 
-    print(f'Loading hypergraph dataset from hyperGCN: {data_name}')
+    print('Loading {} dataset...'.format(data_name))
 
     # Load node features
     with open(osp.join(path, data_name, 'features.pickle'), 'rb') as f:
@@ -103,7 +133,6 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
 
     num_nodes, feature_dim = features.shape
     assert num_nodes == len(labels)
-    print(f'Number of nodes: {num_nodes}, feature dimension: {feature_dim}')
 
     features = torch.FloatTensor(features)
     labels = torch.LongTensor(labels)
@@ -111,6 +140,22 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
     # Load hypergraph
     with open(osp.join(path, data_name, 'hypergraph.pickle'), 'rb') as f:
         hypergraph = pickle.load(f)  # { hyperedge: [list of nodes in the he], ...}
+
+    edge_idx = num_nodes
+    node_list = []
+    edge_list = []
+    for he in hypergraph.keys():
+        cur_he = hypergraph[he]
+        cur_size = len(cur_he)
+
+        node_list += list(cur_he)
+        edge_list += [edge_idx] * cur_size
+
+        edge_idx += 1
+
+    edge_index = np.array([ node_list + edge_list,
+                            edge_list + node_list], dtype = int)
+    edge_index = torch.LongTensor(edge_index)
 
     num_hyperedges = len(hypergraph)
 
@@ -161,17 +206,20 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
 
     # Construct PyTorch Geometric Data object
     data = Data(x=features, 
-                y=labels, 
+                y=labels,
+                edge_index=edge_index,
                 h=H,
-                dist_mat = torch.tensor(node_distances, dtype=torch.float).squeeze(0),
-                norm_mat = torch.tensor(normalization_matrix, dtype=torch.float).squeeze(0),
+                n_x = num_nodes,
+                num_hyperedges = num_hyperedges,
+                dist_mat=torch.tensor(node_distances, dtype=torch.float).squeeze(0),
+                norm_mat=torch.tensor(normalization_matrix, dtype=torch.float).squeeze(0),
                 train_mask=train_mask, 
                 val_mask=val_mask,
                 test_mask=test_mask)
 
     if not os.path.exists(f'{processed_data_dir}/{data_name}.pt'):
         torch.save(data, f'{processed_data_dir}/{data_name}.pt')
-        print(f'Saved preprocessed {data_name} dataset')
+        # print(f'Saved preprocessed {data_name} dataset')
     return data
 
 def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', data_name="Mushroom", train_size=0.5, val_size=0.25):
@@ -205,6 +253,7 @@ def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', d
 
     # From adjacency matrix to edge_list
     edge_index = edges.T
+
     assert edge_index[0].max() == edge_index[1].min() - 1
 
     # check if values in edge_index is consecutive. i.e. no missing value for node_id/he_id.
@@ -214,6 +263,7 @@ def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', d
     num_hyperedges = edge_index[1].max() - num_nodes + 1
 
     edge_index = np.hstack((edge_index, edge_index[::-1, :]))
+    edge_index = torch.from_numpy(edge_index)
 
     H = torch.zeros((num_nodes, num_hyperedges), dtype=torch.float32)
     print(f'H.shape:{H.shape}')
@@ -238,8 +288,6 @@ def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', d
 
     node_distances = 1 / node_distances
 
-    print(f"normalization_matrix:{normalization_matrix}")
-
     labels = labels[:num_nodes]
 
     indices = np.arange(num_nodes)
@@ -262,13 +310,16 @@ def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', d
     train_mask[train_idx] = True
     val_mask[val_idx] = True
     test_mask[test_idx] = True
-
+    
     # build torch data class
     data = Data(x=features, 
                 y=labels,
+                edge_index=edge_index,
                 h=H,
                 dist_mat = torch.tensor(node_distances, dtype=torch.float).squeeze(0), 
                 norm_mat = torch.tensor(normalization_matrix, dtype=torch.float).squeeze(0),
+                n_x = num_nodes,
+                num_hyperedges = num_hyperedges,
                 train_mask=train_mask, 
                 val_mask=val_mask,
                 test_mask=test_mask)

@@ -30,7 +30,6 @@ def train_epoch(model, dloader, loss_fn, optimizer, device, label_index=0):
     all_labels = []
 
     for i, data in enumerate(dloader):
-
         if len(data['y'].squeeze(0).shape) > 1:
             labels = data['y'].squeeze(0)[:, label_index].view(-1, 1).flatten()
             labels = labels.float()
@@ -40,6 +39,8 @@ def train_epoch(model, dloader, loss_fn, optimizer, device, label_index=0):
             labels = (labels + 1) / 2
         if loss_fn.__class__.__name__ == 'CrossEntropyLoss':
             labels = labels.long()
+        else:
+            labels = labels.float()
 
         train_edge_mask = data['train_mask'].squeeze(0)
 
@@ -139,6 +140,8 @@ def test_epoch(model, dloader, loss_fn, device, label_index=0, val_mask=True):
                 labels = (labels + 1) / 2
             if loss_fn.__class__.__name__ == 'CrossEntropyLoss':
                 labels = labels.long()
+            else:
+                labels = labels.float()
 
             data = data.to(device)
             labels = labels.to(device)
