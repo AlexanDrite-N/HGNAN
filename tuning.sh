@@ -1,15 +1,4 @@
 #!/bin/bash
-#SBATCH --job-name=NTU2012_param_tuning
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --time=168:00:00
-#SBATCH --mem=48G
-#SBATCH --cpus-per-task=1
-#SBATCH --gres=gpu:4
-#SBATCH --partition=compsci-gpu
-#SBTACH --nodelist=gpu-compute5,gpu-compute6
-#SBATCH --output=NTU2012_param_tuning.out
-#SBATCH --error=NTU2012_param_tuning.err
 
 data_name=NTU2012
 runs=8
@@ -28,8 +17,7 @@ wd_values=(0.0 0.0005)
 lr_values=(0.001 0.01)
 dropout_values=(0.0 0.5)
 n_layers_values=(3 5)
-hidden_channels_values=(32 64 128)
-
+hidden_channels_values=(32 64 128 256)
 
 for wd in "${wd_values[@]}"; do
   for lr in "${lr_values[@]}"; do

@@ -1,16 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=NTU
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --time=168:00:00
-#SBATCH --mem=48G
-#SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
-#SBATCH --partition=compsci-gpu
-#SBATCH --output=NTU_para.out
-#SBATCH --error=NTU_para.err
 
-# 固定参数
 data_name=NTU2012
 runs=4
 num_epochs=1000
