@@ -44,7 +44,10 @@ def run_exp(train_loader, val_loader, test_loader, num_features, runs, n_layers,
     else:
         device = torch.device("cpu")
 
-    log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log.txt'
+    if tuning == False:
+        log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log_run{run_index}.txt'
+    else:
+        log_file = f'logs/{data_name}_{model_name}_tuning_log.txt'
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
 
     final_test_losses = []
@@ -52,7 +55,7 @@ def run_exp(train_loader, val_loader, test_loader, num_features, runs, n_layers,
 
     with open(log_file, 'w') as log:
         for i, seed in enumerate(seeds):
-            if model_name == 'HGNAM' or model_name == 'EdgeHGNAM':
+            if model_name in ['HGNAM', 'EdgeHGNAM']:
                 model = HGNAM(in_channels=num_features,
                               hidden_channels=hidden_channels,
                               num_layers=n_layers,
@@ -183,28 +186,33 @@ def run_exp(train_loader, val_loader, test_loader, num_features, runs, n_layers,
             final_test_losses.append(final_test_loss)
             final_test_accs.append(final_test_acc)
 
-        final_loss_mean = np.mean(final_test_losses.cpu().numpy())
-        final_loss_var = np.var(final_test_losses.cpu().numpy())
-        final_acc_mean = np.mean(final_test_accs.cpu().numpy())
-        final_acc_var = np.var(final_test_accs.cpu().numpy())
+        final_test_losses = [loss.cpu().item() if isinstance(loss, torch.Tensor) else loss for loss in final_test_losses]
+        final_test_accs = [acc.cpu().item() if isinstance(acc, torch.Tensor) else acc for acc in final_test_accs]
 
-        summary_info = (f"Final Test Loss: {final_loss_mean:.4f} ± {final_loss_var:.4f},  "
-                        f"Final Test Acc: {final_acc_mean:.4f} ± {final_acc_var:.4f}\n")
-        print(summary_info)
-        log.write(summary_info)
+        final_test_losses = np.array(final_test_losses)
+        final_test_accs = np.array(final_test_accs)
+        final_loss_mean = np.mean(final_test_losses)
+        final_loss_std = np.std(final_test_losses)
+        final_acc_mean = np.mean(final_test_accs)
+        final_acc_std = np.std(final_test_accs)
 
-    res_root = 'hyperparameter_tuning'
-    if not osp.isdir(res_root):
-        os.makedirs(res_root)
+        if tuning == True:
+            summary_info = (f"Final Test Loss: {final_loss_mean:.4f} ± {final_loss_std:.4f},  "
+                            f"Final Test Acc: {final_acc_mean:.4f} ± {final_acc_std:.4f}\n")
+            print(summary_info)
 
-    csv_filename = f'{res_root}/{data_name}_tuning.csv'
-    print(f"Saving tuning results to {csv_filename}")
+            res_root = 'hyperparameter_tuning'
+            if not osp.isdir(res_root):
+                os.makedirs(res_root)
 
-    with open(csv_filename, 'a+') as write_obj:
-        cur_line = f'{wd},{lr},{dropout},{n_layers},{hidden_channels},{args.batch_size},'
-        cur_line += f'{final_loss_mean:.3f} ± {final_loss_var:.3f},'
-        cur_line += f'{final_acc_mean:.3f} ± {final_acc_var:.3f}\n'
-        write_obj.write(cur_line)
+            csv_filename = f'{res_root}/{data_name}_tuning.csv'
+            print(f"Saving tuning results to {csv_filename}")
+
+            with open(csv_filename, 'a+') as write_obj:
+                cur_line = f'{wd},{lr},{dropout},{n_layers},{hidden_channels},{args.batch_size},'
+                cur_line += f'{final_loss_mean:.3f} ± {final_loss_std:.3f},'
+                cur_line += f'{final_acc_mean:.3f} ± {final_acc_std:.3f}\n'
+                write_obj.write(cur_line)
 
 if __name__ == '__main__':
     global args
@@ -218,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stop', dest='early_stop', type=int, default=1)
     parser.add_argument('--wd', dest='wd', type=float, default=0.001)
     parser.add_argument('--data_name', dest='data_name', type=str, default='cora_ca',
-                        choices = ['cora','cora_ca','Mushroom','zoo','20newsW100','NTU2012','iAF692'])
+                        choices = ['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619','congress-bills','contact-high-school','email-Enron','NDC-classes'])
     parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAM', choices = ['HGNAM','EdgeHGNAM'])
     parser.add_argument('--runs', dest='runs', type=int, default=10)
     parser.add_argument('--one_m', dest='one_m', type=int, default=0)
@@ -233,7 +241,7 @@ if __name__ == '__main__':
     parser.add_argument('--tuning',dest='tuning',type=bool,default=False)
 
     args = parser.parse_args()
-    loss_thresh = 0.00001
+    loss_thresh = 0.0001
     optimizer_type = torch.optim.Adam
 
     train_loader, val_loader, test_loader, num_features, num_classes= datasets.get_data(data_name=args.data_name, model_name=args.model_name, train_size=args.train_size, val_size=args.val_size,batch_size=args.batch_size)

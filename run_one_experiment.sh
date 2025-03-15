@@ -27,9 +27,9 @@ lr=0.0001
 dropout=0.1
 n_layers=3
 hidden_channels=128
-batch_size=32
+batch_size=64
 
-echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels, batch_size=$batch_size"
+echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels"
 python main_para.py \
   --runs=$runs \
   --wd=$wd \

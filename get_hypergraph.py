@@ -16,27 +16,13 @@ from utils import *
 def get_hypergraph(path='data/raw_data',
                    processed_data_dir='processed_data',dataset='iAF1260', 
                    train_size=0.6):
-    """
-    Constructs a hypergraph but focuses on hyperedge-level distance rather than node distance.
-    1) Loads node features (optional).
-    2) Loads a raw incidence matrix from a .mat file.
-    3) Performs negative sampling to extend the incidence matrix with "negative" edges.
-    4) Computes hyperedge-to-hyperedge distances + normalization.
-    5) Splits edges into train/val/test sets (stratified).
-    6) Packs data into a torch_geometric.data.Data object.
-    7) Adds sign_h to indicate reactants/products for each hyperedge.
-    """
 
-    # ----------------------------
-    # 1) Load node features
-    # ----------------------------
+    # Load node features
     feature_path = f'./{path}/{dataset}/{dataset}.pt'
     node_features = torch.load(feature_path)
     # node_features: shape (N, in_channels)
 
-    # ----------------------------
-    # 2) Load raw incidence matrix from .mat
-    # ----------------------------
+    # Load raw incidence matrix from .mat
     mat_path = f'./{path}/{dataset}/{dataset}.mat'
     data = loadmat(mat_path)
     H = data[dataset]['S']
@@ -45,9 +31,8 @@ def get_hypergraph(path='data/raw_data',
 
     incidence_matrix = np.where(H > 0, 1, np.where(H < 0, 1, 0)).astype(np.float32)
     incidence_matrix = torch.tensor(incidence_matrix, dtype=torch.float)
-    # ----------------------------
-    # 3) Negative sampling
-    # ----------------------------
+
+    # Negative sampling
     combined_H, num_neg_edges = negative_sampling(H) # combined_H shape: (#node, #pos_edges + #neg_edges)
     combined_H = torch.tensor(combined_H, dtype=torch.float)
 
@@ -58,9 +43,8 @@ def get_hypergraph(path='data/raw_data',
 
     edge_features = diff_pooling(node_features, combined_H)
     print("Finish calculating edge embedding!")
-    # ----------------------------
-    # 4) Compute hyperedge-to-hyperedge distances & normalization
-    # ----------------------------
+
+    # Compute hyperedge-to-hyperedge distances & normalization
     edge_dist = shortest_edge_distances(incidence_matrix, full_incidence_matrix, s=1)
     print("Finish calculating distances!")
 
@@ -76,9 +60,7 @@ def get_hypergraph(path='data/raw_data',
     edge_dist += 1
     edge_dist = 1.0 / edge_dist
 
-    # ----------------------------
-    # 5) Create labels & do train/val/test splits
-    # ----------------------------
+    # Create labels & do train/val/test splits
     labels = np.concatenate([np.ones(num_pos_edges), np.zeros(num_neg_edges)])
     assert len(labels) == total_edges, "Mismatch in label length"
 
@@ -95,9 +77,7 @@ def get_hypergraph(path='data/raw_data',
     train_mask[train_idx] = True
     test_mask[test_idx] = True
 
-    # ----------------------------
-    # 6) Pack everything into a Data object
-    # ----------------------------
+    # Pack everything into a Data object
     hypergraph = Data(
         x=torch.tensor(edge_features, dtype=torch.float),  
         h=combined_H,                      
@@ -115,11 +95,7 @@ def get_hypergraph(path='data/raw_data',
     return hypergraph
 
 def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_data', data_name='cora', train_size=0.5, val_size=0.25):
-    '''
-    This function reads the citation dataset from HyperGCN and converts the hypergraph
-    into an incidence matrix where rows represent nodes and columns represent hyperedges.
-    '''
-
+    # adapted from YOU ARE ALLSET: A MULTISET LEARNING FRAMEWORK FOR HYPERGRAPH NEURAL NETWORKS, https://github.com/jianhao2016/AllSet
     print('Loading {} dataset...'.format(data_name))
 
     # Load node features
@@ -189,11 +165,11 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
     val_ratio = val_size / train_val_size
 
     train_val_idx, test_idx, train_val_y, test_y = train_test_split(
-        indices, labels, test_size=test_size, stratify=labels, random_state=0
+        indices, labels, test_size=test_size, stratify=labels, random_state=42
     )
 
     train_idx, val_idx, train_y, val_y = train_test_split(
-        train_val_idx, train_val_y, test_size=val_ratio, stratify=train_val_y, random_state=0
+        train_val_idx, train_val_y, test_size=val_ratio, stratify=train_val_y, random_state=42
     )
 
     train_mask = torch.zeros(num_nodes, dtype=torch.bool)
@@ -219,10 +195,11 @@ def load_citation_dataset(path='data/raw_data', processed_data_dir='processed_da
 
     if not os.path.exists(f'{processed_data_dir}/{data_name}.pt'):
         torch.save(data, f'{processed_data_dir}/{data_name}.pt')
-        # print(f'Saved preprocessed {data_name} dataset')
+        print(f'Saved preprocessed {data_name} dataset')
     return data
 
 def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', data_name="Mushroom", train_size=0.5, val_size=0.25):
+    # adapted from YOU ARE ALLSET: A MULTISET LEARNING FRAMEWORK FOR HYPERGRAPH NEURAL NETWORKS, https://github.com/jianhao2016/AllSet
     # load edges, features, and labels.
     print('Loading {} dataset...'.format(data_name))
 
@@ -328,3 +305,102 @@ def load_LE_dataset(path='data/raw_data', processed_data_dir='processed_data', d
         torch.save(data, f'{processed_data_dir}/{data_name}.pt')
         print(f'Saved preprocessed {data_name} dataset')
     return data
+
+def get_hypergraph_with_noise(path='data/raw_data',
+                   processed_data_dir='processed_data', dataset='congress-bills',
+                   train_size=0.6, feature_noise=0.5):
+
+    # load incidence matrix
+    print(f"Loading {dataset} dataset...")
+    mat_path = f'./{path}/{dataset}.mat'
+    data = loadmat(mat_path)
+    H = data['incidenceMatrix']
+    if isinstance(H, np.ndarray) and H.shape == (1, 1):
+        H = H[0, 0]
+
+    incidence_matrix = np.where(H > 0, 1, np.where(H < 0, 1, 0)).astype(np.float32)
+    incidence_matrix = torch.tensor(incidence_matrix, dtype=torch.float)
+    print("Incidence matrix loaded!")
+
+
+    # Negative sampling
+    print("\nPerforming negative sampling...")
+    combined_H, num_neg_edges = negative_sampling(H)  # Shape: (#nodes, #pos_edges + #neg_edges)
+    combined_H = torch.tensor(combined_H, dtype=torch.float)
+
+    num_pos_edges = H.shape[1]
+    total_edges = combined_H.shape[1]
+
+    full_incidence_matrix = torch.tensor(
+        np.where(combined_H > 0, 1, np.where(combined_H < 0, 1, 0)).astype(np.float32),
+        dtype=torch.float
+    )
+
+    print(f"Negative sampling complete! (Added {num_neg_edges} negative edges)")
+
+    # Assign random edge features
+    print("\nAssigning random edge features...")
+    edge_features = np.zeros((total_edges, 1))
+    edge_features = np.random.normal(edge_features, feature_noise, edge_features.shape)
+    print("Random edge features assigned!")
+
+    # Compute distances
+    print("\nComputing hyperedge-to-hyperedge distances...")
+    edge_dist = shortest_edge_distances(incidence_matrix, full_incidence_matrix, s=1)
+
+    print("Hyperedge distances computed!")
+
+    # Build normalization matrix
+    print("\nNormalizing distance matrix...")
+    normalization_matrix = edge_dist.clone()
+
+    for i in range(len(edge_dist)):
+        entry = edge_dist[i]
+        distances_counts = torch.unique(entry, return_counts=True)
+        normalization_matrix[i].apply_(
+            lambda x: distances_counts[1][(distances_counts[0] == x).nonzero().item()]
+        )
+
+    edge_dist = edge_dist.clone()
+    edge_dist += 1
+    edge_dist = 1.0 / edge_dist
+
+    print("Normalization complete!")
+
+    # train/val/test splits
+    print("\nSplitting dataset...")
+    labels = np.concatenate([np.ones(num_pos_edges), np.zeros(num_neg_edges)])
+    assert len(labels) == total_edges, "Mismatch in label length"
+
+    indices = np.arange(total_edges)
+    test_size = 1 - train_size
+    train_idx, test_idx, train_y, test_y = train_test_split(
+        indices, labels, test_size=test_size, stratify=labels, random_state=42
+    )
+
+    # masks
+    train_mask = torch.zeros(total_edges, dtype=torch.bool)
+    test_mask = torch.zeros(total_edges, dtype=torch.bool)
+
+    train_mask[train_idx] = True
+    test_mask[test_idx] = True
+
+    print("Dataset split complete!")
+
+    # pack everything into a Data object
+    print("\nPacking data into a torch_geometric.data.Data object...")
+    hypergraph = Data(
+        x=edge_features,
+        h=combined_H,
+        y=torch.tensor(labels, dtype=torch.float),
+        dist_mat=edge_dist,
+        norm_mat=normalization_matrix,
+        train_mask=train_mask,
+        test_mask=test_mask
+    )
+
+    save_path = f'{processed_data_dir}/{dataset}.pt'
+    if not os.path.exists(save_path):
+        torch.save(hypergraph, save_path)
+        print(f"Saved preprocessed dataset: {save_path}")
+    return hypergraph

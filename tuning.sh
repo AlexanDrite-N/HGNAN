@@ -22,13 +22,14 @@ val_size=0.25
 weight=False
 aggregation="neighbor"
 tuning=True
+batch_size=64
 
 wd_values=(0.0 0.0005)
 lr_values=(0.001 0.01)
 dropout_values=(0.0 0.5)
 n_layers_values=(3 5)
 hidden_channels_values=(32 64 128)
-batch_size_values=(32 64)
+
 
 for wd in "${wd_values[@]}"; do
   for lr in "${lr_values[@]}"; do
@@ -36,7 +37,7 @@ for wd in "${wd_values[@]}"; do
       for n_layers in "${n_layers_values[@]}"; do
         for hidden_channels in "${hidden_channels_values[@]}"; do
           for batch_size in "${batch_size_values[@]}"; do
-            echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels, batch_size=$batch_size"
+            echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels"
             python main_para.py \
               --runs=$runs \
               --wd=$wd \

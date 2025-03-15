@@ -51,7 +51,10 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
     else:
         device = torch.device("cpu")
 
-    log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log_run{run_index}.txt'
+    if tuning == False:
+        log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log_run{run_index}.txt'
+    else:
+        log_file = f'logs/{data_name}_{model_name}_tuning_log.txt'
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     log = open(log_file, 'w')
 
@@ -239,7 +242,6 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
         print(f"Saving tuning results to {csv_filename}")
         
         with open(csv_filename, 'a+') as write_obj:
-            # 注意：args.batch_size 需要从命令行参数中获取
             cur_line = f'{wd},{lr},{dropout},{n_layers},{hidden_channels},{args.batch_size},'
             cur_line += f'{final_loss_mean:.3f} ± {final_loss_std:.3f},'
             cur_line += f'{final_acc_mean:.3f} ± {final_acc_std:.3f}\n'
@@ -260,7 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stop', dest='early_stop', type=int, default=1)
     parser.add_argument('--wd', dest='wd', type=float, default=0.001)
     parser.add_argument('--data_name', dest='data_name', type=str, default='cora_ca',
-                        choices=['cora','cora_ca','Mushroom','zoo','20newsW100','NTU2012','iAF692'])
+                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619','congress-bills','contact-high-school','email-Enron','NDC-classes'])
     parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAM', choices=['HGNAM','EdgeHGNAM'])
     parser.add_argument('--runs', dest='runs', type=int, default=10)
     parser.add_argument('--one_m', dest='one_m', type=int, default=0)
@@ -275,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument('--tuning', dest='tuning', type=bool, default=False)
 
     args = parser.parse_args()
-    loss_thresh = 0.00001
+    loss_thresh = 0.0001
 
     train_loader, val_loader, test_loader, num_features, num_classes = datasets.get_data(
         data_name=args.data_name,
