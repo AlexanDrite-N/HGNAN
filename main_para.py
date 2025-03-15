@@ -262,7 +262,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stop', dest='early_stop', type=int, default=1)
     parser.add_argument('--wd', dest='wd', type=float, default=0.001)
     parser.add_argument('--data_name', dest='data_name', type=str, default='cora_ca',
-                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619','congress-bills','contact-high-school','email-Enron','NDC-classes'])
+                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619'])
     parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAM', choices=['HGNAM','EdgeHGNAM'])
     parser.add_argument('--runs', dest='runs', type=int, default=10)
     parser.add_argument('--one_m', dest='one_m', type=int, default=0)
