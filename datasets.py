@@ -11,12 +11,15 @@ def get_data(data_name, processed_data_dir='processed_data', model_name='HGNAM',
     
     if not os.path.exists(f'{processed_data_dir}/{data_name}.pt'):
         if model_name == 'HGNAM':
-          if data_name in ['cora','cora_ca']:
+          if data_name in ['cora']:
               data = load_citation_dataset(data_name=data_name, train_size=train_size, val_size=val_size)
           else:
               data = load_LE_dataset(data_name=data_name, train_size=train_size, val_size=val_size)
         else:
-            data = get_hypergraph(dataset=data_name, train_size=train_size)
+            if data_name in ['congress-bills', 'contact-high-school', 'email-Enron', 'NDC-classes']:
+                data = get_hypergraph_with_noise(dataset=data_name, train_size=train_size, feature_noise=0.5)
+            else:
+                data = get_hypergraph(dataset=data_name, train_size=train_size)
     else:
         data = torch.load(f'{processed_data_dir}/{data_name}.pt', weights_only=False)
         print(f'Loaded {data_name} dataset')
@@ -25,12 +28,8 @@ def get_data(data_name, processed_data_dir='processed_data', model_name='HGNAM',
     if model_name == 'HGNAM':
       if data_name == 'cora':
           num_classes = 7
-      elif data_name == 'cora_ca':
-          num_classes = 7
       elif data_name == 'Mushroom':
           num_classes = 2
-      elif data_name == '20newsW100':
-          num_classes = 4
       elif data_name == 'NTU2012':
           num_classes = 67
       elif data_name == 'zoo':

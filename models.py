@@ -93,59 +93,36 @@ class HGNAM(nn.Module):
         if self.aggregation == "overall":
             stacked_results = torch.empty(x.size(0), self.out_channels).to(self.device)
             for j, node in enumerate(range(x.size(0))):
-                node_dists = distances[node] # Shape: (# nodes,)
-                normalization = normalization_matrix[node] # Shape: (# nodes,)
+                node_dists = distances[node]
+                normalization = normalization_matrix[node]
                 m_dist = self.m(node_dists.view(-1, 1))
                 if self.normalize_m:
                     if m_dist.size(1) == 1:
-                        m_dist = torch.div(m_dist, normalization.view(-1, 1)) # Shape: (# nodes, 1)
+                        m_dist = torch.div(m_dist, normalization.view(-1, 1))
                     else:
-                        for i in range(m_dist.size(1)):  # iterate number of classes
-                            m_dist[:, i] = torch.div(m_dist[:, i], normalization) # Shape: (# nodes, # out_channel)
-                pred_for_node = torch.sum(torch.mul(m_dist, f_sums), dim=0) # Shape: (# out_channels,)
+                        for i in range(m_dist.size(1)):
+                            m_dist[:, i] = torch.div(m_dist[:, i], normalization)
+                pred_for_node = torch.sum(torch.mul(m_dist, f_sums), dim=0)
                 stacked_results[j] = pred_for_node.view(1, -1)
             output = stacked_results
 
         elif self.aggregation == "neighbor":
-            # sparse edge index
-            neighbor_mask = (distances == 1.0)
-            edge_indices = neighbor_mask.nonzero(as_tuple=False)
+            N = distances.size(0)
+            out_channels = f_sums.size(1)
+            self_embedding = f_sums
 
-            if edge_indices.size(0) == 0:
-                output = f_sums
-            else:
-                # find target node and its neighbor's index
-                i_indices = edge_indices[:, 0]
-                j_indices = edge_indices[:, 1]
+            # distinguish neighbor(distances==0.5 because distances = 1/(real distances + 1))
+            neighbor_mask = (distances == 0.5)
 
-                # compute \rho (though it is trivial)
-                edge_distances = distances[i_indices, j_indices].view(-1, 1)
-                m_edge = self.m(edge_distances)
+            neighbor_indices = neighbor_mask.nonzero(as_tuple=False)
 
-                if self.normalize_m:
-                    norm_values = normalization_matrix[i_indices, j_indices].view(-1, 1)
-                    m_edge = m_edge / norm_values
+            neighbor_agg = torch.zeros((N, out_channels), device=f_sums.device)
+            neighbor_agg.index_add_(0, neighbor_indices[:, 0], f_sums[neighbor_indices[:, 1]])
 
-                # feature vector for neighbor
-                f_j = f_sums[j_indices]
+            neighbor_counts = neighbor_mask.float().sum(dim=1, keepdim=True)
+            avg_neighbors = torch.where(neighbor_counts > 0, neighbor_agg / neighbor_counts, torch.zeros_like(neighbor_agg))
+            output = self_embedding + avg_neighbors
 
-                # each neighbor's contribution: m_edge * f_j
-                edge_contrib = m_edge * f_j
-
-                N = distances.size(0)
-                out_channels = f_sums.size(1)
-                output = torch.zeros((N, out_channels), device=f_sums.device)
-                # aggregation
-                output.index_add_(0, i_indices, edge_contrib)
-
-                # counting for #neighbor for each node
-                neighbor_counts = torch.zeros((N, 1), device=f_sums.device)
-                ones = torch.ones((edge_indices.size(0), 1), device=f_sums.device)
-                neighbor_counts.index_add_(0, i_indices, ones)
-
-                # in case that a node doesn't have neighbors, then use its own feature
-                mask = (neighbor_counts == 0).squeeze(1)
-                output[mask] = f_sums[mask]
         else:
             raise ValueError("Unknown aggregation type: {}".format(self.aggregation))
         return output
