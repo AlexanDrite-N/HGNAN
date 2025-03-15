@@ -16,10 +16,7 @@ def get_data(data_name, processed_data_dir='processed_data', model_name='HGNAM',
           else:
               data = load_LE_dataset(data_name=data_name, train_size=train_size, val_size=val_size)
         else:
-            if data_name in ['congress-bills', 'contact-high-school', 'email-Enron', 'NDC-classes']:
-                data = get_hypergraph_with_noise(dataset=data_name, train_size=train_size, feature_noise=0.5)
-            else:
-                data = get_hypergraph(dataset=data_name, train_size=train_size)
+            data = get_hypergraph(dataset=data_name, train_size=train_size)
     else:
         data = torch.load(f'{processed_data_dir}/{data_name}.pt', weights_only=False)
         print(f'Loaded {data_name} dataset')
