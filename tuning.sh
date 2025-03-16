@@ -8,9 +8,7 @@ model_name="HGNAM"
 patience=50
 train_size=0.5
 val_size=0.25
-weight=False
 aggregation="neighbor"
-tuning=True
 batch_size=64
 
 wd_values=(0.0 0.0005)
@@ -44,9 +42,9 @@ for wd in "${wd_values[@]}"; do
               --batch_size=$batch_size \
               --train_size=$train_size \
               --val_size=$val_size \
-              --weight=$weight \
+              --weight \
               --aggregation=$aggregation \
-              --tuning=$tuning
+              --tuning
           done
         done
       done

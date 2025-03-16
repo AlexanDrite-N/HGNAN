@@ -179,7 +179,9 @@ def run_exp(train_loader, val_loader, test_loader, num_features, runs, n_layers,
             final_test_loss, final_test_acc, final_test_auroc, final_test_auprc, final_test_recall, final_test_prec, final_test_f1, final_test_time = \
                 trainer.test_epoch(model, dloader=test_loader, device=device, val_mask=False, loss_fn=loss)
             final_test_info = (f"Final Test Loss: {final_test_loss:.4f}, Final Test Acc: {final_test_acc:.4f}, "
-                               f"Final Test AUROC: {final_test_auroc:.4f}\n")
+                               f"Final Test AUROC: {final_test_auroc:.4f}, Final Test AUPRC: {final_test_auprc:.4f},"
+                               f"Fianl Test Recall: {final_test_recall:.4f} Final Test Precision: {final_test_prec:.4f},"
+                               f"Final Test F1: {final_test_f1:.4f}, final_test_time: {final_test_time:.4f}\n")
             print(final_test_info)
             log.write(final_test_info)
 
@@ -236,9 +238,9 @@ if __name__ == '__main__':
     parser.add_argument('--val_size', dest='val_size', type=float, default=0.25)
     parser.add_argument('--m_per_feature', dest='m_per_feature', type=bool, default=False)
     parser.add_argument('--batch_size',dest='batch_size',type=int,default=64)
-    parser.add_argument('--weight',dest='weight',type=bool,default=False)
+    parser.add_argument('--weight', dest='weight', action='store_true')
     parser.add_argument('--aggregation',dest='aggregation',type=str,default="overall", choices = ['overall','neighbor'])
-    parser.add_argument('--tuning',dest='tuning',type=bool,default=False)
+    parser.add_argument('--tuning', dest='tuning', action='store_true')
 
     args = parser.parse_args()
     loss_thresh = 0.0001

@@ -8,9 +8,7 @@ model_name="HGNAM"
 patience=50
 train_size=0.5
 val_size=0.25
-weight=False
 aggregation="neighbor"
-tuning=True
 wd=0.0
 lr=0.0001
 dropout=0.1
@@ -37,6 +35,6 @@ python main_para.py \
   --batch_size=$batch_size \
   --train_size=$train_size \
   --val_size=$val_size \
-  --weight=$weight \
+  --weight \
   --aggregation=$aggregation \
-  --tuning=$tuning
+

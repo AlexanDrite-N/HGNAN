@@ -91,20 +91,13 @@ class HGNAM(nn.Module):
             f_sums = fx.sum(dim=1)
 
         if self.aggregation == "overall":
-            stacked_results = torch.empty(x.size(0), self.out_channels).to(self.device)
-            for j, node in enumerate(range(x.size(0))):
-                node_dists = distances[node]
-                normalization = normalization_matrix[node]
-                m_dist = self.m(node_dists.view(-1, 1))
-                if self.normalize_m:
-                    if m_dist.size(1) == 1:
-                        m_dist = torch.div(m_dist, normalization.view(-1, 1))
-                    else:
-                        for i in range(m_dist.size(1)):
-                            m_dist[:, i] = torch.div(m_dist[:, i], normalization)
-                pred_for_node = torch.sum(torch.mul(m_dist, f_sums), dim=0)
-                stacked_results[j] = pred_for_node.view(1, -1)
-            output = stacked_results
+            m_dist = self.m(distances.flatten().view(-1, 1))
+            m_dist = m_dist.view(distances.size(0), distances.size(1), self.out_channels)
+
+            if self.normalize_m:
+                m_dist = m_dist / normalization_matrix.unsqueeze(-1)
+
+            output = torch.sum(m_dist * f_sums.unsqueeze(0), dim=1)
 
         elif self.aggregation == "neighbor":
             N = distances.size(0)
