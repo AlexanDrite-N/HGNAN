@@ -9,3 +9,5 @@ To use it for link prediction task, set "model_name", "train_size" and "val_size
 If you want to tuning the model, run "tuning.sh". If you have a specific set of hyperparameters, you can train the model using "run_one_experiment.py".
 
 If you have multiple gpus and want to run them in parallel, change "python main.py" in .sh files to "python main_para.py".
+
+Processed datasets could be found at https://drive.google.com/drive/folders/1Tii_EdlOwq1BprRIjV8I4Q5zXXVFHM9U?usp=drive_link . Please download them and move them into "processed_data/" if needed.
