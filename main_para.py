@@ -2,7 +2,6 @@ import argparse
 from models import *
 import trainer
 import datasets
-import uuid
 import numpy as np
 import torch
 import os
@@ -37,11 +36,24 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
 
-def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_features, n_layers, early_stop_flag,
-                   dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh,
-                   data_name, unique_run_id, one_m, normalize_m, num_classes, out_dim, weight, aggregation, tuning, loss_type):
+def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode):
     np.random.seed(seed)
     torch.manual_seed(seed)
+    
+    train_loader, val_loader, test_loader, num_features, num_classes = datasets.get_data(
+        data_name=args.data_name,
+        model_name=args.model_name,
+        train_size=args.train_size,
+        val_size=args.val_size,
+        batch_size=args.batch_size, seed=seed
+    )
+
+    if num_classes == 2:
+        loss_type = torch.nn.BCEWithLogitsLoss
+        out_dim = 1
+    else:
+        loss_type = torch.nn.CrossEntropyLoss
+        out_dim = num_classes
 
     if torch.cuda.is_available():
         num_gpus = torch.cuda.device_count()
@@ -50,14 +62,14 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
         device = torch.device(f"cuda:{device_id}")
     else:
         device = torch.device("cpu")
-
+        
     if tuning == False:
-        log_file = f'logs/{unique_run_id}_{data_name}_{model_name}_training_log_run{run_index}.txt'
+        log_file = f'logs/{data_name}_{model_name}_training_log_run{run_index}.txt'
     else:
         log_file = f'logs/{data_name}_{model_name}_tuning_log.txt'
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     log = open(log_file, 'w')
-
+    
     if model_name in ['HGNAM', 'EdgeHGNAM']:
         model = HGNAM(in_channels=num_features,
                       hidden_channels=hidden_channels,
@@ -94,12 +106,11 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
         'loss_thresh': loss_thresh,
         'seed': seed,
         'data_name': data_name,
-        'unique_run_id': unique_run_id,
         'early_stop_flag': early_stop_flag,
         'num_features': num_features,
         'limited_m': one_m,
         'normalize_m': normalize_m,
-        'seed index': run_index,
+        'run_index': run_index,
         'num_classes': num_classes,
     }
     
@@ -111,6 +122,7 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr, weight_decay=wd)
     loss_fn = loss_type()
     early_stop = EarlyStopping(patience=patience, min_is_better=True)
+
     best_val_acc = 0
     best_model_state = None
     
@@ -125,7 +137,7 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
         if tuning == False:
             print(f"Run {run_index}, Training epoch {epoch}:")
             log.write(f"Run {run_index}, Training epoch {epoch}:\n")
-
+            
         train_loss, train_acc, train_auroc, train_auprc, train_recall, train_precision, train_f1, train_time = \
             trainer.train_epoch(model, dloader=train_loader, optimizer=optimizer, device=device, loss_fn=loss_fn)
         
@@ -147,7 +159,7 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
             best_model_state = copy.deepcopy(model.state_dict())
             if tuning == False:
                 torch.save(model.state_dict(),
-                           f'models/{unique_run_id}_{data_name}_{model_name}_{seed}_best_val_acc.pt')
+                           f'models/{data_name}_{model_name}_{seed}_best_val_acc.pt')
             if tuning == False:
                 if model_name == "HGNAM":
                     test_loss, test_acc, test_auroc, test_auprc, test_rec, test_prec, test_f1, test_time = \
@@ -183,21 +195,22 @@ def run_single_run(seed, run_index, train_loader, val_loader, test_loader, num_f
             break
 
     model.load_state_dict(best_model_state)
-    final_test_loss, final_test_acc, final_test_auroc, final_test_auprc, final_test_recall, final_test_prec, final_test_f1, final_test_time = \
-        trainer.test_epoch(model, dloader=test_loader, device=device, val_mask=False, loss_fn=loss_fn)
+    if mode == 'train':
+        final_test_loss, final_test_acc, final_test_auroc, final_test_auprc, final_test_recall, final_test_prec, final_test_f1, final_test_time = \
+            trainer.test_epoch(model, dloader=test_loader, device=device, val_mask=True, loss_fn=loss_fn)
+    elif mode == 'evaluation':
+        final_test_loss, final_test_acc, final_test_auroc, final_test_auprc, final_test_recall, final_test_prec, final_test_f1, final_test_time = \
+            trainer.test_epoch(model, dloader=test_loader, device=device, val_mask=False, loss_fn=loss_fn)
+        
     final_test_info = (f"Final Test Loss: {final_test_loss:.4f}, Final Test Acc: {final_test_acc:.4f}, "
-                       f"Final Test AUROC: {final_test_auroc:.4f}, Final Test AUPRC: {final_test_auprc:.4f},"
-                       f"Fianl Test Recall: {final_test_recall:.4f} Final Test Precision: {final_test_prec:.4f},"
-                       f"Final Test F1: {final_test_f1:.4f}, final_test_time: {final_test_time:.4f}\n")
+                       f"Final Test AUROC: {final_test_auroc:.4f}, Final Test AUPRC: {final_test_auprc:.4f}, Fianl Test Recall: {final_test_recall:.4f} Final Test Precision: {final_test_prec:.4f}, Final Test F1: {final_test_f1:.4f}, final_test_time: {final_test_time:.4f}\n")
     print(final_test_info)
     log.write(final_test_info)
     log.close()
     
     return final_test_loss, final_test_acc
 
-def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, n_layers, early_stop_flag, dropout,
-                     model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name,
-                     unique_run_id, one_m, normalize_m, num_classes, out_dim, weight, aggregation, tuning, loss_type):
+def run_exp_parallel(runs, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode):
     np.random.seed(0)
     seeds = np.random.randint(low=0, high=10000, size=runs)
     
@@ -209,16 +222,14 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
     with concurrent.futures.ProcessPoolExecutor(max_workers=num_gpus) as executor:
         futures = []
         for i, seed in enumerate(seeds):
-            futures.append(executor.submit(run_single_run, int(seed), i, train_loader, val_loader, test_loader,
-                                           num_features, n_layers, early_stop_flag, dropout, model_name,
+            futures.append(executor.submit(run_single_run, int(seed), i, n_layers, early_stop_flag, dropout, model_name,
                                            num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh,
-                                           data_name, unique_run_id, one_m, normalize_m, num_classes, out_dim,
-                                           weight, aggregation, tuning, loss_type))
+                                           data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode))
         for future in concurrent.futures.as_completed(futures):
             test_loss, test_acc = future.result()
             final_test_losses.append(test_loss)
             final_test_accs.append(test_acc)
-
+    
     final_test_losses = [loss.cpu().item() if isinstance(loss, torch.Tensor) else loss for loss in final_test_losses]
     final_test_accs = [acc.cpu().item() if isinstance(acc, torch.Tensor) else acc for acc in final_test_accs]
 
@@ -230,12 +241,10 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
     final_acc_mean = np.mean(final_test_accs)
     final_acc_std = np.std(final_test_accs)
 
-
+    summary_info = (f"Final Test Loss: {final_loss_mean:.4f} ± {final_loss_std:.4f},  "
+                    f"Final Test Acc: {final_acc_mean*100:.4f} ± {final_acc_std*100:.4f}\n")
+    print(summary_info)
     if tuning == True:
-        summary_info = (f"Final Test Loss: {final_loss_mean:.4f} ± {final_loss_std:.4f},  "
-                        f"Final Test Acc: {final_acc_mean:.4f} ± {final_acc_std:.4f}\n")
-        print(summary_info)
-        
         res_root = 'hyperparameter_tuning'
         if not osp.isdir(res_root):
             os.makedirs(res_root)
@@ -245,11 +254,9 @@ def run_exp_parallel(train_loader, val_loader, test_loader, num_features, runs, 
         
         with open(csv_filename, 'a+') as write_obj:
             cur_line = f'{wd},{lr},{dropout},{n_layers},{hidden_channels},{args.batch_size},'
-            cur_line += f'{final_loss_mean:.3f} ± {final_loss_std:.3f},'
-            cur_line += f'{final_acc_mean:.3f} ± {final_acc_std:.3f}\n'
+            cur_line += f'{final_loss_mean:.4f} ± {final_loss_std:.4f},'
+            cur_line += f'{final_acc_mean:.4f} ± {final_acc_std:.4f}\n'
             write_obj.write(cur_line)
-    
-    return final_loss_mean, final_loss_std, final_acc_mean, final_acc_std
 
 if __name__ == '__main__':
     mp.set_start_method("spawn", force=True)
@@ -264,7 +271,7 @@ if __name__ == '__main__':
     parser.add_argument('--early_stop', dest='early_stop', type=int, default=1)
     parser.add_argument('--wd', dest='wd', type=float, default=0.001)
     parser.add_argument('--data_name', dest='data_name', type=str, default='cora_ca',
-                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619'])
+                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619','congress-bills','contact-high-school','email-Enron','NDC-classes'])
     parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAM', choices=['HGNAM','EdgeHGNAM'])
     parser.add_argument('--runs', dest='runs', type=int, default=10)
     parser.add_argument('--one_m', dest='one_m', type=int, default=0)
@@ -277,34 +284,16 @@ if __name__ == '__main__':
     parser.add_argument('--weight', dest='weight', action='store_true')
     parser.add_argument('--aggregation', dest='aggregation', type=str, default="overall", choices=['overall','neighbor'])
     parser.add_argument('--tuning', dest='tuning', action='store_true')
+    parser.add_argument('--mode', dest='mode', type=str, default='train', choices=['train','evaluation'])
 
     args = parser.parse_args()
     loss_thresh = 0.0001
 
-    train_loader, val_loader, test_loader, num_features, num_classes = datasets.get_data(
-        data_name=args.data_name,
-        model_name=args.model_name,
-        train_size=args.train_size,
-        val_size=args.val_size,
-        batch_size=args.batch_size
-    )
-
-    if num_classes == 2:
-        loss_type = torch.nn.BCEWithLogitsLoss
-        out_dim = 1
-    else:
-        loss_type = torch.nn.CrossEntropyLoss
-        out_dim = num_classes
-
-    unique_run_id = uuid.uuid1()
-
     if args.tuning == False:
         print(args)
 
-    run_exp_parallel(train_loader=train_loader, val_loader=val_loader, test_loader=test_loader, num_features=num_features,
-                     runs=args.runs, n_layers=args.n_layers, early_stop_flag=args.early_stop, dropout=args.dropout,
+    run_exp_parallel(runs=args.runs, n_layers=args.n_layers, early_stop_flag=args.early_stop, dropout=args.dropout,
                      model_name=args.model_name, num_epochs=args.num_epochs, wd=args.wd,
                      hidden_channels=args.hidden_channels, lr=args.lr, bias=args.bias, patience=args.patience,
-                     loss_thresh=loss_thresh, data_name=args.data_name, unique_run_id=unique_run_id,
-                     one_m=args.one_m, normalize_m=args.normalize_m, num_classes=num_classes,
-                     out_dim=out_dim, weight=args.weight, aggregation=args.aggregation, tuning=args.tuning, loss_type=loss_type)
+                     loss_thresh=loss_thresh, data_name=args.data_name, one_m=args.one_m, normalize_m=args.normalize_m, 
+                     weight=args.weight, aggregation=args.aggregation, tuning=args.tuning, args=args, mode =args.mode)
