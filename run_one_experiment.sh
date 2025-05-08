@@ -28,7 +28,7 @@ batch_size=64
 mode='evaluation'
 
 echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels, batch_size=$batch_size"
-python main_para.py \
+python main.py \
   --runs=$runs \
   --wd=$wd \
   --model_name=$model_name \

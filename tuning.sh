@@ -35,7 +35,7 @@ for wd in "${wd_values[@]}"; do
       for n_layers in "${n_layers_values[@]}"; do
         for hidden_channels in "${hidden_channels_values[@]}"; do
           echo "Running with wd=$wd, lr=$lr, dropout=$dropout, n_layers=$n_layers, hidden_channels=$hidden_channels"
-          python main_para.py \
+          python main.py \
             --runs=$runs \
             --wd=$wd \
             --model_name=$model_name \
