@@ -1,6 +1,6 @@
 #!/bin/bash
 
-data_name=Mushroom
+data_name=zoo
 runs=10
 num_epochs=2000
 normalize_m=1
@@ -10,9 +10,9 @@ train_size=0.5
 val_size=0.25
 lr=0.001
 wd=0.0
-dropout=0.5
-n_layers=3
-hidden_channels=64
+dropout=0.0
+n_layers=5
+hidden_channels=256
 batch_size=64
 mode='evaluation'
 
