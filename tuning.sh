@@ -1,6 +1,6 @@
 #!/bin/bash
 
-data_name=Mushroom
+data_name=zoo
 num_epochs=2000
 runs=10
 normalize_m=1
