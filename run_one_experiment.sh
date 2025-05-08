@@ -1,29 +1,18 @@
 #!/bin/bash
-#SBATCH --job-name=NTU2012
-#SBATCH --nodes=1
-#SBATCH --ntasks=1
-#SBATCH --time=48:00:00
-#SBATCH --mem=48G
-#SBATCH --cpus-per-task=4
-#SBATCH --gres=gpu:4
-#SBATCH --partition=compsci-gpu
-#SBATCH --output=NTU2012.out
-#SBATCH --error=NTU2012.err
 
-data_name=NTU2012
+data_name=Mushroom
 runs=10
 num_epochs=2000
 normalize_m=1
-model_name="HGNAM"
+model_name="HGNAM-node"
 patience=50
 train_size=0.5
 val_size=0.25
-aggregation="neighbor"
 lr=0.001
 wd=0.0
 dropout=0.5
 n_layers=3
-hidden_channels=256
+hidden_channels=64
 batch_size=64
 mode='evaluation'
 
@@ -47,5 +36,4 @@ python main.py \
   --train_size=$train_size \
   --val_size=$val_size \
   --weight \
-  --aggregation=$aggregation \
   --mode=$mode

@@ -36,7 +36,7 @@ class EarlyStopping:
             self.best_score = score
             self.counter = 0
 
-def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode):
+def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, tuning, args, mode):
     np.random.seed(seed)
     torch.manual_seed(seed)
     
@@ -69,9 +69,14 @@ def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_na
         log_file = f'logs/{data_name}_{model_name}_tuning_log.txt'
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     log = open(log_file, 'w')
-    
-    if model_name in ['HGNAM', 'EdgeHGNAM']:
-        model = HGNAM(in_channels=num_features,
+
+    if model_name == 'HGNAN-node':
+        aggregation = 'neighbor'
+    elif model_name == 'HGNAN-edge':
+        aggregation = 'overall'
+
+    if model_name in ['HGNAN-node', 'HGNAN-edge']:
+        model = HGNAN(in_channels=num_features,
                       hidden_channels=hidden_channels,
                       num_layers=n_layers,
                       out_channels=out_dim,
@@ -145,7 +150,7 @@ def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_na
             print("Validating on Validation Set:")
             log.write("Validating on Validation Set:\n")
             
-        if model_name == "HGNAM":
+        if model_name == "HGNAN":
             val_loss, val_acc, val_auroc, val_auprc, val_rec, val_prec, val_f1, val_time = \
                 trainer.test_epoch(model, dloader=val_loader, device=device, val_mask=True, loss_fn=loss_fn)
         else:
@@ -161,7 +166,7 @@ def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_na
                 torch.save(model.state_dict(),
                            f'models/{data_name}_{model_name}_{seed}_best_val_acc.pt')
             if tuning == False:
-                if model_name == "HGNAM":
+                if model_name == "HGNAN-node":
                     test_loss, test_acc, test_auroc, test_auprc, test_rec, test_prec, test_f1, test_time = \
                         trainer.test_epoch(model, dloader=val_loader, device=device, val_mask=False, loss_fn=loss_fn)
                     best_info = (f"[Best Val Updated] Epoch: {epoch:03d} "
@@ -170,7 +175,7 @@ def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_na
                                  f"Test Loss: {test_loss:.4f}, Test Acc: {test_acc:.4f}\n")
                     print(best_info)
                     log.write(best_info)
-                elif model_name == "EdgeHGNAM":
+                elif model_name == "HGNAN-edge":
                     best_info = (f"[Best Val Updated] Epoch: {epoch:03d} "
                                  f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}, "
                                  f"Test Loss: {val_loss:.4f}, Test Acc: {val_acc:.4f}\n")
@@ -210,7 +215,7 @@ def run_single_run(seed, run_index, n_layers, early_stop_flag, dropout, model_na
     
     return final_test_loss, final_test_acc
 
-def run_exp_parallel(runs, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode):
+def run_exp_parallel(runs, n_layers, early_stop_flag, dropout, model_name, num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh, data_name, one_m, normalize_m, weight, tuning, args, mode):
     np.random.seed(0)
     seeds = np.random.randint(low=0, high=10000, size=runs)
     
@@ -224,7 +229,7 @@ def run_exp_parallel(runs, n_layers, early_stop_flag, dropout, model_name, num_e
         for i, seed in enumerate(seeds):
             futures.append(executor.submit(run_single_run, int(seed), i, n_layers, early_stop_flag, dropout, model_name,
                                            num_epochs, wd, hidden_channels, lr, bias, patience, loss_thresh,
-                                           data_name, one_m, normalize_m, weight, aggregation, tuning, args, mode))
+                                           data_name, one_m, normalize_m, weight, tuning, args, mode))
         for future in concurrent.futures.as_completed(futures):
             test_loss, test_acc = future.result()
             final_test_losses.append(test_loss)
@@ -271,8 +276,8 @@ if __name__ == '__main__':
     parser.add_argument('--early_stop', dest='early_stop', type=int, default=1)
     parser.add_argument('--wd', dest='wd', type=float, default=0.001)
     parser.add_argument('--data_name', dest='data_name', type=str, default='cora_ca',
-                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619','congress-bills','contact-high-school','email-Enron','NDC-classes'])
-    parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAM', choices=['HGNAM','EdgeHGNAM'])
+                        choices=['cora','Mushroom','zoo','NTU2012','iAF1260b','iJR904','iYO844','iSB619'])
+    parser.add_argument('--model_name', dest='model_name', type=str, default='HGNAN-node', choices=['HGNAN-node','HGNAN-edge'])
     parser.add_argument('--runs', dest='runs', type=int, default=10)
     parser.add_argument('--one_m', dest='one_m', type=int, default=0)
     parser.add_argument('--normalize_m', dest='normalize_m', type=int, default=1)
@@ -282,7 +287,6 @@ if __name__ == '__main__':
     parser.add_argument('--m_per_feature', dest='m_per_feature', type=bool, default=False)
     parser.add_argument('--batch_size', dest='batch_size', type=int, default=64)
     parser.add_argument('--weight', dest='weight', action='store_true')
-    parser.add_argument('--aggregation', dest='aggregation', type=str, default="overall", choices=['overall','neighbor'])
     parser.add_argument('--tuning', dest='tuning', action='store_true')
     parser.add_argument('--mode', dest='mode', type=str, default='train', choices=['train','evaluation'])
 
@@ -296,4 +300,4 @@ if __name__ == '__main__':
                      model_name=args.model_name, num_epochs=args.num_epochs, wd=args.wd,
                      hidden_channels=args.hidden_channels, lr=args.lr, bias=args.bias, patience=args.patience,
                      loss_thresh=loss_thresh, data_name=args.data_name, one_m=args.one_m, normalize_m=args.normalize_m, 
-                     weight=args.weight, aggregation=args.aggregation, tuning=args.tuning, args=args, mode =args.mode)
+                     weight=args.weight, tuning=args.tuning, args=args, mode=args.mode)

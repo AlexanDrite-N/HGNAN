@@ -14,13 +14,12 @@ from sklearn.model_selection import train_test_split
 from utils import *
 
 def get_hypergraph(path='data/raw_data',
-                   processed_data_dir='processed_data',dataset='iAF1260', 
-                   train_size=0.6):
+                   processed_data_dir='processed_data',dataset='iAF1260b',
+                   train_size=0.5, val_size=0.25):
 
     # Load node features
     feature_path = f'./{path}/{dataset}/{dataset}.pt'
     node_features = torch.load(feature_path)
-    # node_features: shape (N, in_channels)
 
     # Load raw incidence matrix from .mat
     mat_path = f'./{path}/{dataset}/{dataset}.mat'
@@ -65,9 +64,16 @@ def get_hypergraph(path='data/raw_data',
     assert len(labels) == total_edges, "Mismatch in label length"
 
     indices = np.arange(total_edges)
-    test_size = 1 - train_size
-    train_idx, test_idx, train_y, test_y = train_test_split(
-        indices, labels, test_size=test_size, stratify=labels, random_state=0
+    train_val_size = train_size + val_size
+    test_size = 1 - train_val_size
+    val_ratio = val_size / train_val_size
+
+    train_val_idx, test_idx, train_val_y, test_y = train_test_split(
+        indices, labels, test_size=test_size, stratify=labels, random_state=42
+    )
+
+    train_idx, val_idx, train_y, val_y = train_test_split(
+        train_val_idx, train_val_y, test_size=val_ratio, stratify=train_val_y, random_state=42
     )
 
     # Build boolean masks

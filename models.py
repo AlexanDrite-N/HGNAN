@@ -4,7 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 from utils import *
 
-class HGNAM(nn.Module):
+class HGNAN(nn.Module):
     def __init__(
           self,
           in_channels,
